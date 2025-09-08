@@ -151,8 +151,8 @@ fun RttScreen(vm: RttViewModel, fusionVm: FusionViewModel) {
             modifier = Modifier
 //                .padding(padding)
                 .fillMaxSize()
-                .padding(8.dp)
-                .verticalScroll(scrollState),
+                .padding(8.dp),
+//                .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // ------ Anchor editor UI you already added ------
@@ -190,13 +190,13 @@ fun RttScreen(vm: RttViewModel, fusionVm: FusionViewModel) {
                 fontWeight = FontWeight.SemiBold
             )
 
-            // (Optional) also show raw RTT est for comparison:
-            val phone = ui.phoneX?.let { x -> ui.phoneY?.let { y -> x to y } }
-            Text(
-                text = phone?.let { "RTT-only: x=${"%.2f".format(it.first)} m, y=${"%.2f".format(it.second)} m" }
-                    ?: "RTT-only: —",
-                color = MaterialTheme.colorScheme.secondary
-            )
+//            // (Optional) also show raw RTT est for comparison:
+//            val phone = ui.phoneX?.let { x -> ui.phoneY?.let { y -> x to y } }
+//            Text(
+//                text = phone?.let { "RTT-only: x=${"%.2f".format(it.first)} m, y=${"%.2f".format(it.second)} m" }
+//                    ?: "RTT-only: —",
+//                color = MaterialTheme.colorScheme.secondary
+//            )
 
             // ---------- Canvas with FUSED position ----------
             val scale = 30f // 1 m = 30 px
