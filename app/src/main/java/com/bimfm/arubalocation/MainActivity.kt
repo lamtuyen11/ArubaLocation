@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import com.bimfm.arubalocation.sensor.Pdr
 import com.bimfm.arubalocation.viewmodel.FusionViewModel
 import com.bimfm.arubalocation.viewmodel.RttViewModel
+import androidx.compose.foundation.lazy.items
+
 
 class MainActivity : ComponentActivity() {
 
@@ -90,36 +92,31 @@ fun RttScreen(vm: RttViewModel, fusionVm: FusionViewModel) {
         else
             arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
     }
-    // ACTIVITY_RECOGNITION is runtime from Android 10 (Q, API 29)
     val needsActivityReco = remember { Build.VERSION.SDK_INT >= 29 }
-    val activityPerm = arrayOf(android.Manifest.permission.ACTIVITY_RECOGNITION)
 
     val wifiPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { _ ->
-        vm.refreshRttAps(ctx)
-    }
+    ) { vm.refreshRttAps(ctx) }
+
     val activityPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { _ -> /* no-op; we’ll start PDR on lifecycle if granted */ }
+    ) { /* no-op; PDR starts after grant via lifecycle */ }
 
-    // Request both when user taps the button
     fun requestAll() {
         wifiPermLauncher.launch(wifiPerms)
-        if (needsActivityReco) activityPermLauncher.launch(android.Manifest.permission.ACTIVITY_RECOGNITION)
+        if (needsActivityReco) {
+            activityPermLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+        }
     }
 
     // ---- PDR: create, wire to FusionVM, start/stop with lifecycle ----
-    val pdr = remember { Pdr(ctx) }
-    // Wire displacement -> fusion
+    val pdr = remember { com.bimfm.arubalocation.sensor.Pdr(ctx) }
     LaunchedEffect(Unit) {
         pdr.onDisplacement { dx, dy, tNanos ->
             fusionVm.onStep(dx, dy, tNanos)
         }
     }
-    // Start/stop with composition lifecycle
     DisposableEffect(Unit) {
-        // Try to start immediately; if ACTIVITY_RECOGNITION not granted, start after user grants
         pdr.start()
         onDispose { pdr.stop() }
     }
@@ -129,7 +126,6 @@ fun RttScreen(vm: RttViewModel, fusionVm: FusionViewModel) {
         val x = ui.phoneX
         val y = ui.phoneY
         if (x != null && y != null) {
-            // simple sigma; feel free to compute from your readings' stdDev and geometry
             val sigmaRtt = (ui.readings.map { it.stdDevM }.average().takeIf { !it.isNaN() } ?: 1.3) * 1.5
             fusionVm.onRttFix(x, y, sigmaRtt.coerceIn(1.0, 6.0))
         }
@@ -141,102 +137,116 @@ fun RttScreen(vm: RttViewModel, fusionVm: FusionViewModel) {
     // ---- Initial Wi-Fi scan once ----
     LaunchedEffect(Unit) { vm.refreshRttAps(ctx) }
 
-    val scrollState = rememberScrollState()
     val stroke = with(LocalDensity.current) { 1.dp.toPx() }
 
-//    Scaffold(
-//        topBar = { TopAppBar(title = { Text("Wi-Fi RTT Aruba Location") }) }
-//    ) { padding ->
-        Column(
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("Wi-Fi RTT Aruba Location") }) }
+    ) { padding ->
+        LazyColumn(
             modifier = Modifier
-//                .padding(padding)
+                .padding(padding)
                 .fillMaxSize()
-                .padding(8.dp),
-//                .verticalScroll(scrollState),
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // ------ Anchor editor UI you already added ------
-
-            AnchorEditor(
-                vm = vm,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-            )
-
-
-            Text("RTT available: ${ui.rttAvailable}", fontWeight = FontWeight.SemiBold)
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { requestAll() }) { Text("Grant Permissions") }
-                Button(onClick = { vm.refreshRttAps(ctx) }) { Text("Scan RTT APs") }
-                Button(onClick = { vm.startRanging(ctx) }) { Text("Range") }
+            // Anchor editor
+            item {
+                AnchorEditor(
+                    vm = vm,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                )
             }
 
-            ui.error?.let { Text("⚠️ $it", color = MaterialTheme.colorScheme.error) }
-
-            Text("RTT-capable APs (BSSID):")
-            ui.rttAps.forEach { Text("• $it") }
-
-            Text("Readings:")
-            ui.readings.forEach {
-                Text("• ${it.bssid}: ${"%.2f".format(it.distanceM)} m (±${"%.2f".format(it.stdDevM)}), RSSI ${it.rssi}")
+            // Status + actions
+            item {
+                Text("RTT available: ${ui.rttAvailable}", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { requestAll() }) { Text("Grant Permissions") }
+                    Button(onClick = { vm.refreshRttAps(ctx) }) { Text("Scan RTT APs") }
+                    Button(onClick = { vm.startRanging(ctx) }) { Text("Range") }
+                }
+                ui.error?.let {
+                    Spacer(Modifier.height(4.dp))
+                    Text("⚠️ $it", color = MaterialTheme.colorScheme.error)
+                }
             }
-            Text(
-                text = when (fused) {
-                    null -> "Fused: —"
-                    else -> "Fused: x=${"%.2f".format(fused!!.x)} m, y=${"%.2f".format(fused!!.y)} m  (±${"%.1f".format(fused!!.sigma)} m)"
-                },
-                fontWeight = FontWeight.SemiBold
-            )
 
-//            // (Optional) also show raw RTT est for comparison:
-//            val phone = ui.phoneX?.let { x -> ui.phoneY?.let { y -> x to y } }
-//            Text(
-//                text = phone?.let { "RTT-only: x=${"%.2f".format(it.first)} m, y=${"%.2f".format(it.second)} m" }
-//                    ?: "RTT-only: —",
-//                color = MaterialTheme.colorScheme.secondary
-//            )
+            // RTT-capable APs list
+            if (ui.rttAps.isNotEmpty()) {
+                item { Text("RTT-capable APs (BSSID):") }
+                items(ui.rttAps) { bssid ->
+                    Text("• $bssid")
+                }
+            }
 
-            // ---------- Canvas with FUSED position ----------
-            val scale = 30f // 1 m = 30 px
-            Card(Modifier.fillMaxWidth().height(240.dp)) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Canvas(Modifier.fillMaxSize().padding(12.dp)) {
-                        val cx = size.width / 2f
-                        val cy = size.height / 2f
+            // Readings list
+            if (ui.readings.isNotEmpty()) {
+                item { Text("Readings:") }
+                items(ui.readings) { r ->
+                    Text("• ${r.bssid}: ${"%.2f".format(r.distanceM)} m (±${"%.2f".format(r.stdDevM)}), RSSI ${r.rssi}")
+                }
+            }
 
-                        // axes
-                        drawLine(
-                            color = Color.LightGray,
-                            start = Offset(0f, cy),
-                            end = Offset(size.width, cy),
-                            strokeWidth = stroke
-                        )
-                        drawLine(
-                            color = Color.LightGray,
-                            start = Offset(cx, 0f),
-                            end = Offset(cx, size.height),
-                            strokeWidth = stroke
-                        )
+            // Canvas with fused position (fixed height bounds)
+            item {
+                val scale = 30f // 1 m = 30 px
+                Card(Modifier.fillMaxWidth().height(240.dp)) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Canvas(Modifier.fillMaxSize().padding(12.dp)) {
+                            val cx = size.width / 2f
+                            val cy = size.height / 2f
 
-                        // fused phone dot (RTT + PDR)
-                        fused?.let { fix ->
-                            val px = cx + (fix.x.toFloat() * scale)
-                            val py = cy - (fix.y.toFloat() * scale)
-                            drawCircle(
-                                color = Color.Red,
-                                radius = 8f,
-                                center = Offset(px, py)
+                            drawLine(
+                                color = Color.LightGray,
+                                start = Offset(0f, cy),
+                                end = Offset(size.width, cy),
+                                strokeWidth = stroke
                             )
+                            drawLine(
+                                color = Color.LightGray,
+                                start = Offset(cx, 0f),
+                                end = Offset(cx, size.height),
+                                strokeWidth = stroke
+                            )
+
+                            fused?.let { fix ->
+                                val px = cx + (fix.x.toFloat() * scale)
+                                val py = cy - (fix.y.toFloat() * scale)
+                                drawCircle(
+                                    color = Color.Red,
+                                    radius = 8f,
+                                    center = Offset(px, py)
+                                )
+                            }
                         }
                     }
                 }
             }
 
-
+            // Summary
+            item {
+                val phone = ui.phoneX?.let { x -> ui.phoneY?.let { y -> x to y } }
+                Column {
+                    Text(
+                        text = fused?.let {
+                            "Fused: x=${"%.2f".format(it.x)} m, y=${"%.2f".format(it.y)} m  (±${"%.1f".format(it.sigma)} m)"
+                        } ?: "Fused: —",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = phone?.let { "RTT-only: x=${"%.2f".format(it.first)} m, y=${"%.2f".format(it.second)} m" }
+                            ?: "RTT-only: —",
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
         }
     }
+}
+
 //}
 
 
