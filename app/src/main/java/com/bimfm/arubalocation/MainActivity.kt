@@ -20,6 +20,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -143,24 +144,26 @@ fun RttScreen(vm: RttViewModel, fusionVm: FusionViewModel) {
     val scrollState = rememberScrollState()
     val stroke = with(LocalDensity.current) { 1.dp.toPx() }
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Wi-Fi RTT Aruba Location") }) }
-    ) { padding ->
+//    Scaffold(
+//        topBar = { TopAppBar(title = { Text("Wi-Fi RTT Aruba Location") }) }
+//    ) { padding ->
         Column(
             modifier = Modifier
-                .padding(padding)
+//                .padding(padding)
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(8.dp)
                 .verticalScroll(scrollState),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // ------ Anchor editor UI you already added ------
+
             AnchorEditor(
                 vm = vm,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp)
             )
+
 
             Text("RTT available: ${ui.rttAvailable}", fontWeight = FontWeight.SemiBold)
 
@@ -179,8 +182,21 @@ fun RttScreen(vm: RttViewModel, fusionVm: FusionViewModel) {
             ui.readings.forEach {
                 Text("• ${it.bssid}: ${"%.2f".format(it.distanceM)} m (±${"%.2f".format(it.stdDevM)}), RSSI ${it.rssi}")
             }
+            Text(
+                text = when (fused) {
+                    null -> "Fused: —"
+                    else -> "Fused: x=${"%.2f".format(fused!!.x)} m, y=${"%.2f".format(fused!!.y)} m  (±${"%.1f".format(fused!!.sigma)} m)"
+                },
+                fontWeight = FontWeight.SemiBold
+            )
 
-            Spacer(Modifier.height(8.dp))
+            // (Optional) also show raw RTT est for comparison:
+            val phone = ui.phoneX?.let { x -> ui.phoneY?.let { y -> x to y } }
+            Text(
+                text = phone?.let { "RTT-only: x=${"%.2f".format(it.first)} m, y=${"%.2f".format(it.second)} m" }
+                    ?: "RTT-only: —",
+                color = MaterialTheme.colorScheme.secondary
+            )
 
             // ---------- Canvas with FUSED position ----------
             val scale = 30f // 1 m = 30 px
@@ -218,23 +234,9 @@ fun RttScreen(vm: RttViewModel, fusionVm: FusionViewModel) {
                 }
             }
 
-            Text(
-                text = when (fused) {
-                    null -> "Fused: —"
-                    else -> "Fused: x=${"%.2f".format(fused!!.x)} m, y=${"%.2f".format(fused!!.y)} m  (±${"%.1f".format(fused!!.sigma)} m)"
-                },
-                fontWeight = FontWeight.SemiBold
-            )
 
-            // (Optional) also show raw RTT est for comparison:
-            val phone = ui.phoneX?.let { x -> ui.phoneY?.let { y -> x to y } }
-            Text(
-                text = phone?.let { "RTT-only: x=${"%.2f".format(it.first)} m, y=${"%.2f".format(it.second)} m" }
-                    ?: "RTT-only: —",
-                color = MaterialTheme.colorScheme.secondary
-            )
         }
     }
-}
+//}
 
 
